@@ -72,7 +72,6 @@ fun PureWallpaperLauncherScreen() {
         mutableStateOf<ImageBitmap?>(loadCurrentOrSavedWallpaper(context, savedWallpaperFile))
     }
 
-    // Otvara sistemski birač slika (možeš otići i u Download i izabrati bilo koju sliku)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -108,7 +107,6 @@ fun PureWallpaperLauncherScreen() {
                 )
             }
     ) {
-        // Pozadina koja stoji ispod i na praznom ekranu i kad se otvori fioka sa ikonicama
         wallpaperBitmap?.let { bmp ->
             Image(
                 bitmap = bmp,
@@ -133,7 +131,6 @@ fun PureWallpaperLauncherScreen() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    // Poluprovidna tamna podloga da se wallpaper vidi i preko ekrana sa ikonicama
                     .background(Color(0x88000000))
                     .statusBarsPadding()
                     .navigationBarsPadding()
@@ -146,7 +143,6 @@ fun PureWallpaperLauncherScreen() {
                         .fillMaxWidth()
                         .padding(bottom = 12.dp, start = 6.dp, end = 6.dp)
                 ) {
-                    // Dugme za povratak na trenutnu sistemsku pozadinu telefona
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
@@ -166,7 +162,6 @@ fun PureWallpaperLauncherScreen() {
                         )
                     }
 
-                    // Ručka za zatvaranje fioke
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -182,7 +177,6 @@ fun PureWallpaperLauncherScreen() {
                         )
                     }
 
-                    // Dugme za izbor slike iz galerije / Download foldera
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(14.dp))
@@ -252,13 +246,6 @@ private fun loadCurrentOrSavedWallpaper(context: android.content.Context, savedF
 private fun loadSystemWallpaperOnly(context: android.content.Context): ImageBitmap? {
     return try {
         val wm = WallpaperManager.getInstance(context)
-        val pfd = wm.openFile(WallpaperManager.FLAG_SYSTEM)
-        if (pfd != null) {
-            pfd.use {
-                val bmp = BitmapFactory.decodeFileDescriptor(it.fileDescriptor)
-                if (bmp != null) return bmp.asImageBitmap()
-            }
-        }
         val drawable: Drawable? = wm.peekDrawable() ?: wm.drawable
         drawable?.let { drawableToBitmap(it).asImageBitmap() }
     } catch (_: Exception) {
