@@ -1,11 +1,14 @@
 package com.example.purelauncher
 
-import android.app.WallpaperManager
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -39,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.io.FileOutputStream
 
@@ -66,9 +70,20 @@ fun PureWallpaperLauncherScreen() {
     val customWallpaperFile = remember {
         File(context.filesDir, "custom_wallpaper.jpg")
     }
+    val downloadWallpaperFile = remember {
+        File("/storage/emulated/0/Download/wallpaper.jpg")
+    }
 
     var wallpaperBitmap by remember {
-        mutableStateOf<ImageBitmap?>(loadWallpaper(context, customWallpaperFile))
+        mutableStateOf<ImageBitmap?>(loadWallpaper(downloadWallpaperFile, customWallpaperFile))
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
+        }
     }
 
     val pickImageLauncher = rememberLauncherForActivityResult(
@@ -76,7 +91,20 @@ fun PureWallpaperLauncherScreen() {
     ) { uri: Uri? ->
         if (uri != null) {
             saveUriToFile(context, uri, customWallpaperFile)
-            wallpaperBitmap = loadWallpaper(context, customWallpaperFile)
+            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val neededPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(context, neededPerm) != PackageManager.PERMISSION_GRANTED) {
+            permissionLauncher.launch(neededPerm)
+        } else {
+            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
         }
     }
 
@@ -135,7 +163,6 @@ fun PureWallpaperLauncherScreen() {
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                // Gornja traka u fioci: ručka za zatvaranje i dugme za promjenu pozadine
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -143,7 +170,21 @@ fun PureWallpaperLauncherScreen() {
                         .fillMaxWidth()
                         .padding(bottom = 12.dp, start = 6.dp, end = 6.dp)
                 ) {
-                    Spacer(modifier = Modifier.width(64.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .clickable {
+                                wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "Osvježi",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp
+                        )
+                    }
 
                     Box(
                         modifier = Modifier
@@ -168,7 +209,7 @@ fun PureWallpaperLauncherScreen() {
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = "Pozadina",
+                            text = "Izaberi",
                             color = Color.White.copy(alpha = 0.85f),
                             fontSize = 11.sp
                         )
@@ -218,14 +259,12 @@ fun PureWallpaperLauncherScreen() {
     }
 }
 
-private fun loadWallpaper(context: android.content.Context, customFile: File): ImageBitmap? {
+private fun loadWallpaper(downloadFile: File, customFile: File): ImageBitmap? {
     return try {
-        if (customFile.exists()) {
-            android.graphics.BitmapFactory.decodeFile(customFile.absolutePath)?.asImageBitmap()
-        } else {
-            val wm = WallpaperManager.getInstance(context)
-            val drawable: Drawable? = wm.drawable
-            drawable?.let { drawableToBitmap(it).asImageBitmap() }
+        when {
+            downloadFile.exists() -> BitmapFactory.decodeFile(downloadFile.absolutePath)?.asImageBitmap()
+            customFile.exists() -> BitmapFactory.decodeFile(customFile.absolutePath)?.asImageBitmap()
+            else -> null
         }
     } catch (_: Exception) {
         null
@@ -233,10 +272,13 @@ private fun loadWallpaper(context: android.content.Context, customFile: File): I
 }
 
 private fun saveUriToFile(context: android.content.Context, uri: Uri, targetFile: File) {
-    context.contentResolver.openInputStream(uri)?.use { input ->
-        FileOutputStream(targetFile).use { output ->
-            input.copyTo(output)
+    try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(targetFile).use { output ->
+                input.copyTo(output)
+            }
         }
+    } catch (_: Exception) {
     }
 }
 
