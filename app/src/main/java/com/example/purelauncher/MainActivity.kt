@@ -1,19 +1,12 @@
 package com.example.purelauncher
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
@@ -32,19 +25,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import java.io.File
-import java.io.FileOutputStream
 
 data class AppEntry(
     val label: String,
@@ -67,55 +57,23 @@ fun PureWallpaperLauncherScreen() {
     var drawerOpen by remember { mutableStateOf(false) }
     var dragAccumulatedY by remember { mutableFloatStateOf(0f) }
 
-    val customWallpaperFile = remember {
-        File(context.filesDir, "custom_wallpaper.jpg")
-    }
-    val downloadWallpaperFile = remember {
-        File("/storage/emulated/0/Download/wallpaper.jpg")
-    }
-
-    var wallpaperBitmap by remember {
-        mutableStateOf<ImageBitmap?>(loadWallpaper(downloadWallpaperFile, customWallpaperFile))
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
-        }
-    }
-
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            saveUriToFile(context, uri, customWallpaperFile)
-            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        val neededPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        if (ContextCompat.checkSelfPermission(context, neededPerm) != PackageManager.PERMISSION_GRANTED) {
-            permissionLauncher.launch(neededPerm)
-        } else {
-            wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
-        }
-    }
-
     val installedApps = remember {
         loadInstalledApps(context)
     }
 
+    val autumnGradient = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFF2B1B12),
+            Color(0xFF6E3B1E),
+            Color(0xFFB86B2B),
+            Color(0xFF3A2314)
+        )
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(autumnGradient)
             .pointerInput(drawerOpen) {
                 detectDragGestures(
                     onDragStart = { dragAccumulatedY = 0f },
@@ -134,15 +92,6 @@ fun PureWallpaperLauncherScreen() {
                 )
             }
     ) {
-        wallpaperBitmap?.let { bmp ->
-            Image(
-                bitmap = bmp,
-                contentDescription = "Wallpaper",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
-
         AnimatedVisibility(
             visible = drawerOpen,
             enter = slideInVertically(
@@ -163,57 +112,21 @@ fun PureWallpaperLauncherScreen() {
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp, start = 6.dp, end = 6.dp)
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { drawerOpen = false }
+                        .padding(horizontal = 24.dp, vertical = 6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White.copy(alpha = 0.14f))
-                            .clickable {
-                                wallpaperBitmap = loadWallpaper(downloadWallpaperFile, customWallpaperFile)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "Osvježi",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { drawerOpen = false }
-                            .padding(horizontal = 24.dp, vertical = 6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(42.dp)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White.copy(alpha = 0.5f))
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White.copy(alpha = 0.14f))
-                            .clickable { pickImageLauncher.launch("image/*") }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "Izaberi",
-                            color = Color.White.copy(alpha = 0.85f),
-                            fontSize = 11.sp
-                        )
-                    }
+                            .width(42.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.5f))
+                    )
                 }
 
                 LazyVerticalGrid(
@@ -256,29 +169,6 @@ fun PureWallpaperLauncherScreen() {
                 }
             }
         }
-    }
-}
-
-private fun loadWallpaper(downloadFile: File, customFile: File): ImageBitmap? {
-    return try {
-        when {
-            downloadFile.exists() -> BitmapFactory.decodeFile(downloadFile.absolutePath)?.asImageBitmap()
-            customFile.exists() -> BitmapFactory.decodeFile(customFile.absolutePath)?.asImageBitmap()
-            else -> null
-        }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun saveUriToFile(context: android.content.Context, uri: Uri, targetFile: File) {
-    try {
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            FileOutputStream(targetFile).use { output ->
-                input.copyTo(output)
-            }
-        }
-    } catch (_: Exception) {
     }
 }
 
