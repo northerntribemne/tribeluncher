@@ -1,12 +1,17 @@
 package com.example.purelauncher
 
+import android.app.WallpaperManager
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
@@ -25,16 +30,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.io.File
+import java.io.FileOutputStream
 
 data class AppEntry(
     val label: String,
@@ -57,23 +64,32 @@ fun PureWallpaperLauncherScreen() {
     var drawerOpen by remember { mutableStateOf(false) }
     var dragAccumulatedY by remember { mutableFloatStateOf(0f) }
 
+    val savedWallpaperFile = remember {
+        File(context.filesDir, "selected_wallpaper.jpg")
+    }
+
+    var wallpaperBitmap by remember {
+        mutableStateOf<ImageBitmap?>(loadCurrentOrSavedWallpaper(context, savedWallpaperFile))
+    }
+
+    // Otvara sistemski birač slika (možeš otići i u Download i izabrati bilo koju sliku)
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            saveUriToFile(context, uri, savedWallpaperFile)
+            wallpaperBitmap = loadCurrentOrSavedWallpaper(context, savedWallpaperFile)
+        }
+    }
+
     val installedApps = remember {
         loadInstalledApps(context)
     }
 
-    val autumnGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF2B1B12),
-            Color(0xFF6E3B1E),
-            Color(0xFFB86B2B),
-            Color(0xFF3A2314)
-        )
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(autumnGradient)
+            .background(Color(0xFF1A1A1A))
             .pointerInput(drawerOpen) {
                 detectDragGestures(
                     onDragStart = { dragAccumulatedY = 0f },
@@ -92,6 +108,16 @@ fun PureWallpaperLauncherScreen() {
                 )
             }
     ) {
+        // Pozadina koja stoji ispod i na praznom ekranu i kad se otvori fioka sa ikonicama
+        wallpaperBitmap?.let { bmp ->
+            Image(
+                bitmap = bmp,
+                contentDescription = "Wallpaper",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         AnimatedVisibility(
             visible = drawerOpen,
             enter = slideInVertically(
@@ -107,26 +133,69 @@ fun PureWallpaperLauncherScreen() {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xD9111111))
+                    // Poluprovidna tamna podloga da se wallpaper vidi i preko ekrana sa ikonicama
+                    .background(Color(0x88000000))
                     .statusBarsPadding()
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
-                Box(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 12.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { drawerOpen = false }
-                        .padding(horizontal = 24.dp, vertical = 6.dp)
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp, start = 6.dp, end = 6.dp)
                 ) {
+                    // Dugme za povratak na trenutnu sistemsku pozadinu telefona
                     Box(
                         modifier = Modifier
-                            .width(42.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(Color.White.copy(alpha = 0.5f))
-                    )
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .clickable {
+                                if (savedWallpaperFile.exists()) {
+                                    savedWallpaperFile.delete()
+                                }
+                                wallpaperBitmap = loadSystemWallpaperOnly(context)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Sistemska",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Ručka za zatvaranje fioke
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { drawerOpen = false }
+                            .padding(horizontal = 24.dp, vertical = 6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(42.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.65f))
+                        )
+                    }
+
+                    // Dugme za izbor slike iz galerije / Download foldera
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color.Black.copy(alpha = 0.55f))
+                            .clickable { imagePickerLauncher.launch("image/*") }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "Izaberi sliku",
+                            color = Color.White,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
 
                 LazyVerticalGrid(
@@ -169,6 +238,42 @@ fun PureWallpaperLauncherScreen() {
                 }
             }
         }
+    }
+}
+
+private fun loadCurrentOrSavedWallpaper(context: android.content.Context, savedFile: File): ImageBitmap? {
+    if (savedFile.exists()) {
+        val bmp = BitmapFactory.decodeFile(savedFile.absolutePath)
+        if (bmp != null) return bmp.asImageBitmap()
+    }
+    return loadSystemWallpaperOnly(context)
+}
+
+private fun loadSystemWallpaperOnly(context: android.content.Context): ImageBitmap? {
+    return try {
+        val wm = WallpaperManager.getInstance(context)
+        val pfd = wm.openFile(WallpaperManager.FLAG_SYSTEM)
+        if (pfd != null) {
+            pfd.use {
+                val bmp = BitmapFactory.decodeFileDescriptor(it.fileDescriptor)
+                if (bmp != null) return bmp.asImageBitmap()
+            }
+        }
+        val drawable: Drawable? = wm.peekDrawable() ?: wm.drawable
+        drawable?.let { drawableToBitmap(it).asImageBitmap() }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun saveUriToFile(context: android.content.Context, uri: Uri, targetFile: File) {
+    try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(targetFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+    } catch (_: Exception) {
     }
 }
 
