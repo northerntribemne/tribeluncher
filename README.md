@@ -4,7 +4,11 @@ Minimalistički Android launcher: na početnom ekranu je **samo tvoja slika**. N
 ni pretrage, a aplikacije se pojave tek kad ih zatražiš.
 
 <p align="center">
-  <img src="slike/pocetni.jpg" width="300" alt="Početni ekran — samo pozadinska slika">
+  <img src="slike/pocetni.jpg" width="280" alt="Početni ekran — samo pozadinska slika">
+  &nbsp;&nbsp;
+  <img src="slike/fioka.jpg" width="280" alt="Fioka sa aplikacijama (prevlačenje nagore)">
+  <br>
+  <sub>Početni ekran &nbsp;·&nbsp; Fioka sa aplikacijama</sub>
 </p>
 
 ## Šta radi
