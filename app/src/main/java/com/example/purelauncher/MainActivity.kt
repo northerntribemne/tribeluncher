@@ -46,8 +46,15 @@ import java.io.FileOutputStream
 data class AppEntry(
     val label: String,
     val packageName: String,
+    val activityName: String,
     val icon: ImageBitmap
-)
+) {
+    // jedna aplikacija može imati više ikona (više launcher aktivnosti) — ključ je aktivnost, ne paket
+    val key: String get() = "$packageName/$activityName"
+}
+
+/** Home dugme dok je launcher otvoren → zatvori fioku (vrati prazan ekran sa slikom). */
+private val homePressed = mutableIntStateOf(0)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +62,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             PureWallpaperLauncherScreen()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        homePressed.intValue++
     }
 }
 
@@ -81,9 +93,30 @@ fun PureWallpaperLauncherScreen() {
         }
     }
 
-    val installedApps = remember {
-        loadInstalledApps(context)
+    // spisak aplikacija se osvježava: pri svakom povratku na launcher i kad se aplikacija instalira/ukloni/ažurira
+    var installedApps by remember { mutableStateOf(loadInstalledApps(context)) }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) installedApps = loadInstalledApps(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+    DisposableEffect(Unit) {
+        val rx = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context, i: Intent) { installedApps = loadInstalledApps(context) }
+        }
+        val f = android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED); addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED); addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        }
+        context.registerReceiver(rx, f)
+        onDispose { runCatching { context.unregisterReceiver(rx) } }
+    }
+    val home by homePressed
+    LaunchedEffect(home) { if (home > 0) drawerOpen = false }
 
     Box(
         modifier = Modifier
@@ -198,16 +231,17 @@ fun PureWallpaperLauncherScreen() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(installedApps, key = { it.packageName }) { app ->
+                    items(installedApps, key = { it.key }) { app ->
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(10.dp))
                                 .clickable {
-                                    val launchIntent = context.packageManager
-                                        .getLaunchIntentForPackage(app.packageName)
-                                    if (launchIntent != null) {
-                                        context.startActivity(launchIntent)
+                                    val launchIntent = Intent(Intent.ACTION_MAIN)
+                                        .addCategory(Intent.CATEGORY_LAUNCHER)
+                                        .setComponent(android.content.ComponentName(app.packageName, app.activityName))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                                    if (runCatching { context.startActivity(launchIntent) }.isSuccess) {
                                         drawerOpen = false
                                     }
                                 }
@@ -289,8 +323,8 @@ private fun loadInstalledApps(context: android.content.Context): List<AppEntry> 
             if (pkg == context.packageName) return@mapNotNull null
             val label = info.loadLabel(pm).toString()
             val icon = drawableToBitmap(info.loadIcon(pm)).asImageBitmap()
-            AppEntry(label = label, packageName = pkg, icon = icon)
+            AppEntry(label = label, packageName = pkg, activityName = info.activityInfo.name, icon = icon)
         }
-        .distinctBy { it.packageName }
+        .distinctBy { it.key }
         .sortedBy { it.label.lowercase() }
 }
